@@ -10,6 +10,7 @@ class Service {
     private $httpClient;
     private $error;
     private $response;
+    private $count;
 
     private $headers = [
         'Content-Type' => 'application/json'
@@ -19,7 +20,7 @@ class Service {
      * Construct method (Set the API key, URI base and instance GuzzleHttp client)
      * @access public
      * @param $apiKey String The Supabase project API Key
-     * @param $uriBase String API URI base (Ex: "https://abcdefgh.supabase.co/rest/v1/" OR "https://abcdefgh.supabase.co/auth/v1/") 
+     * @param $uriBase String API URI base (Ex: "https://abcdefgh.supabase.co/rest/v1/" OR "https://abcdefgh.supabase.co/auth/v1/")
      * @return void
      */
     public function __construct(string $apiKey, string $uriBase)
@@ -29,12 +30,14 @@ class Service {
 
         $this->httpClient = new \GuzzleHttp\Client();
         $this->headers['apikey'] = $this->apiKey;
+
+        $this->count = 0;
     }
 
     /**
      * Set bearerToken to be added into headers and to be used for future requests
      * @access public
-     * @param $bearerToken String The bearer user token (generated in sign in process)  
+     * @param $bearerToken String The bearer user token (generated in sign in process)
      * @return Service
      */
     public function setBearerToken($bearerToken)
@@ -46,14 +49,14 @@ class Service {
     /**
      * Format URI base with slash at end
      * @access private
-     * @param $uriBase String API URI base (Ex: "https://abcdefgh.supabase.co/rest/v1/" OR "https://abcdefgh.supabase.co/auth/v1/") 
+     * @param $uriBase String API URI base (Ex: "https://abcdefgh.supabase.co/rest/v1/" OR "https://abcdefgh.supabase.co/auth/v1/")
      * @return void
      */
     private function formatUriBase(string $uriBase) : string
     {
         return (substr($uriBase , -1) == '/')
             ? $uriBase
-            : $uriBase . '/'; 
+            : $uriBase . '/';
     }
 
     /**
@@ -196,12 +199,21 @@ class Service {
         }
     }
 
+
+	/**
+	 * Return total number of records in a query if count=exact header is set. Otherwise number of returned records
+	 * @return mixed
+	 */
+    public function getCount(){
+    	return $this->count;
+	}
+
     /**
      * Execute a Http request in Supabase API
      * @access public
      * @param $method String The request method (GET, POST, PUT, DELETE, PATCH, ...)
      * @param $uri String The URI to be requested (including the endpoint)
-     * @param $options array Requisition options (header, body, ...) 
+     * @param $options array Requisition options (header, body, ...)
      * @return array|object|null
      */
     public function executeHttpRequest(string $method, string $uri, array $options)
@@ -212,7 +224,17 @@ class Service {
                 $uri,
                 $options
             );
-            return json_decode($this->response->getBody());
+
+			$response = json_decode($this->response->getBody());
+
+			if(in_array('Prefer', array_keys($options['headers'])) && strpos($options['headers']['Prefer'], 'count=exact') !== false){
+				$range = $this->response->getHeaderLine('Content-Range');
+				$this->count = explode('/', $range)[1];
+			}else{
+				$this->count = count($response);
+			}
+
+            return $response;
         } catch(\GuzzleHttp\Exception\RequestException $e){
             $this->formatRequestException($e);
             throw $e;
